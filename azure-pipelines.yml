@@ -1,0 +1,71 @@
+# .NET Desktop
+# Build and run tests for .NET Desktop or Windows classic desktop solutions.
+# Add steps that publish symbols, save build artifacts, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/apps/windows/dot-net
+
+trigger:
+- master
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+  major: '1'
+  minor: '0'
+  patch: $[counter(format('{0}.{1}', variables['major'], variables['minor']), 0)]
+
+name: Deon.$(BuildDefinitionName)_$(major).$(minor).$(patch)
+steps:
+- task: richardfennellBM.BM-VSTS-Versioning-Task.Version-DotNetCoreAssemblies-Task.VersionDotNetCoreAssemblies@2
+  displayName: 'Version .NET Core FileVersion'
+  inputs:
+    VersionNumber: '$(major).$(minor).$(patch).0'
+    Injectversion: true
+    Field: FileVersion
+
+- task: richardfennellBM.BM-VSTS-Versioning-Task.Version-DotNetCoreAssemblies-Task.VersionDotNetCoreAssemblies@2
+  displayName: 'Version .NET Core PackageVersion'
+  inputs:
+    VersionNumber: '$(major).$(minor).$(patch).0'
+    Injectversion: true
+    Field: Version
+    AddDefault: true
+    OutputVersion: OutputedPackageVersion
+
+- task: DotNetCoreCLI@2
+  displayName: 'dotnet restore'
+  inputs:
+    command: restore
+    projects: '$(solution)'
+    vstsFeed: 'common-packages'
+
+- task: DotNetCoreCLI@2
+  displayName: 'dotnet build'
+  inputs:
+    projects: '$(solution)'
+    arguments: '--no-restore --configuration $(buildConfiguration)'
+
+- task: DotNetCoreCLI@2
+  displayName: 'dotnet pack'
+  inputs:
+    command: pack
+    packagesToPack: '$(solution)'
+    packDirectory: '$(Build.ArtifactStagingDirectory)'
+    nobuild: true
+    includesource: true
+
+- task: DotNetCoreCLI@2
+  displayName: 'dotnet push'
+  inputs:
+    command: push
+    packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;!$(Build.ArtifactStagingDirectory)/**/*.symbols.nupkg'
+    publishVstsFeed: 'common-packages'
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
